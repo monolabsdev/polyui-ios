@@ -1,52 +1,56 @@
 import { Host } from '@expo/ui';
 import {
-  Button,
   BottomSheet,
+  Button,
+  GlassEffectContainer,
   HStack,
-  Label,
-  List,
-  ProgressView,
+  Image,
+  Menu,
   RNHostView,
+  ScrollView,
   Section,
-  TabView,
+  Spacer,
   Text,
   TextField,
   type TextFieldRef,
   useNativeState,
   VStack,
+  ZStack,
 } from '@expo/ui/swift-ui';
 import {
   accessibilityLabel,
+  background,
+  buttonBorderShape,
   buttonStyle,
   controlSize,
+  disabled,
   font,
   foregroundStyle,
   frame,
-  listStyle,
+  glassEffect,
   padding,
-  tabViewStyle,
   textFieldStyle,
   tint,
+  shapes,
 } from '@expo/ui/swift-ui/modifiers';
-import * as Haptics from 'expo-haptics';
 import * as Crypto from 'expo-crypto';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { MarkdownMessage } from '@/components/markdown-message';
 import PairingContent from '@/components/pairing-content.ios';
 import { cacheMessage } from '@/data/conversation-cache';
 import { fetchAgents } from '@/data/agents';
-import { loadHostMessages, sendHostMessage } from '@/network/poly-api';
 import { type Agent, type ChatMessage } from '@/domain/poly';
+import { loadHostMessages, sendHostMessage } from '@/network/poly-api';
 import { useAppStore } from '@/state/app-store';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [tab, setTab] = useState('workspace');
   const [pairingPresented, setPairingPresented] = useState(false);
-  const { data: agents = [], isLoading, isError } = useQuery({
+  const { data: agents = [], isError } = useQuery({
     queryKey: ['agents'],
     queryFn: fetchAgents,
   });
@@ -64,24 +68,16 @@ export default function HomeScreen() {
   }, [activeAgentId, setMessages]);
 
   return (
-    <Host style={{ flex: 1 }} seedColor="#0A84FF">
-      <TabView selection={tab} onSelectionChange={setTab} modifiers={[tabViewStyle({ type: 'automatic' })]}>
-        <TabView.Tab value="workspace" label="Workspace" systemImage="rectangle.3.group">
-          <WorkspaceTab
-            agents={agents}
-            isLoading={isLoading}
-            isError={isError}
-            onPair={() => setPairingPresented(true)}
-            onSettings={() => router.push('/settings')}
-          />
-        </TabView.Tab>
-        <TabView.Tab value="chat" label="Chat" systemImage="bubble.left.and.bubble.right">
-          <ChatTab agents={agents} />
-        </TabView.Tab>
-        <TabView.Tab value="activity" label="Activity" systemImage="bell">
-          <ActivityTab />
-        </TabView.Tab>
-      </TabView>
+    <Host style={{ flex: 1 }} seedColor="#AF52DE">
+      <VStack spacing={0}>
+        <ChatHeader
+          agents={agents}
+          isError={isError}
+          onPair={() => setPairingPresented(true)}
+          onSettings={() => router.push('/settings')}
+        />
+        <ChatSurface agents={agents} />
+      </VStack>
 
       <BottomSheet isPresented={pairingPresented} onIsPresentedChange={setPairingPresented}>
         <PairingContent onDone={() => setPairingPresented(false)} />
@@ -90,55 +86,74 @@ export default function HomeScreen() {
   );
 }
 
-function WorkspaceTab({
+function ChatHeader({
   agents,
-  isLoading,
   isError,
   onPair,
   onSettings,
 }: {
   agents: Agent[];
-  isLoading: boolean;
   isError: boolean;
   onPair: () => void;
   onSettings: () => void;
 }) {
   return (
-    <List modifiers={[listStyle('insetGrouped')]}>
-      <Section title="Hosts">
-        {isLoading ? <ProgressView /> : null}
-        {isError ? <Label title="Unable to load hosts" systemImage="exclamationmark.triangle" /> : null}
-        {agents.map((agent) => <HostRow key={agent.id} agent={agent} />)}
-      </Section>
-      <Section title="Quick actions">
-        <Button label="Pair a host" systemImage="qrcode.viewfinder" onPress={onPair} />
-        <Button label="Settings" systemImage="gearshape" onPress={onSettings} />
-      </Section>
-    </List>
-  );
-}
+    <GlassEffectContainer spacing={12} modifiers={[padding({ horizontal: 20, top: 8, bottom: 6 })]}>
+      <HStack alignment="center">
+        <Menu
+          label={
+            <ZStack alignment="topTrailing" modifiers={[glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'circle' }), frame({ width: 58, height: 48 })]}>
+              <Image systemName="line.3.horizontal" size={24} modifiers={[foregroundStyle('primary')]} />
+              <Text
+                modifiers={[
+                  font({ textStyle: 'caption2', weight: 'bold' }),
+                  foregroundStyle('#FFFFFF'),
+                  background('#FF3B30', shapes.circle()),
+                  frame({ width: 21, height: 21 }),
+                ]}
+              >
+                1
+              </Text>
+            </ZStack>
+          }
+          modifiers={[buttonStyle('plain'), accessibilityLabel('Open chats and settings')]}
+        >
+          <Button label="New chat" systemImage="square.and.pencil" />
+          <Button label="Pair a host" systemImage="qrcode.viewfinder" onPress={onPair} />
+          <Button label="Settings" systemImage="gearshape" onPress={onSettings} />
+        </Menu>
 
-function HostRow({ agent }: { agent: Agent }) {
-  const setActiveAgent = useAppStore((state) => state.setActiveAgent);
-  return (
-    <Button onPress={() => setActiveAgent(agent.id)} modifiers={[accessibilityLabel(`${agent.name}, ${agent.status}`)]}>
-      <HStack spacing={12} modifiers={[padding({ vertical: 4 })]}>
-        <Label
-          title={agent.name}
-          systemImage={agent.status === 'online' ? 'desktopcomputer' : 'wifi.slash'}
+        <Spacer />
+        <Menu
+          label={
+            <HStack spacing={5} modifiers={[padding({ horizontal: 8, vertical: 7 })]}>
+              <Text modifiers={[font({ textStyle: 'title3', weight: 'semibold' })]}>Chat</Text>
+              <Image systemName="chevron.down" size={12} modifiers={[foregroundStyle('secondary')]} />
+            </HStack>
+          }
+          modifiers={[buttonStyle('plain'), accessibilityLabel('Choose conversation')]}
+        >
+          <Button label={agents[0]?.name ?? 'No host paired'} systemImage="desktopcomputer" />
+          {isError ? <Button label="Host unavailable" systemImage="wifi.exclamationmark" /> : null}
+        </Menu>
+        <Spacer />
+
+        <Button
+          label=""
+          systemImage="bubble.left.and.bubble.right"
+          modifiers={[
+            buttonStyle('glass'),
+            buttonBorderShape('circle'),
+            controlSize('large'),
+            accessibilityLabel('New conversation'),
+          ]}
         />
-        <VStack alignment="trailing" spacing={2} modifiers={[frame({ maxWidth: 180 })]}>
-          <Text modifiers={[foregroundStyle(agent.status === 'online' ? '#34C759' : 'secondary'), font({ textStyle: 'caption' })]}>
-            {agent.status === 'online' ? 'Online' : 'Offline'}
-          </Text>
-          <Text modifiers={[foregroundStyle('secondary'), font({ textStyle: 'caption2' })]}>{agent.host}</Text>
-        </VStack>
       </HStack>
-    </Button>
+    </GlassEffectContainer>
   );
 }
 
-function ChatTab({ agents }: { agents: Agent[] }) {
+function ChatSurface({ agents }: { agents: Agent[] }) {
   const activeAgentId = useAppStore((state) => state.activeAgentId);
   const messages = useAppStore((state) => state.messages.filter((message) => message.agentId === activeAgentId));
   const draft = useAppStore((state) => state.draft);
@@ -159,67 +174,139 @@ function ChatTab({ agents }: { agents: Agent[] }) {
       content,
       createdAt: new Date().toISOString(),
     };
+    const history = messages;
+    const assistantId = Crypto.randomUUID();
     addMessage(message);
+    addMessage({ ...message, id: assistantId, role: 'assistant', content: '' });
     void inputRef.current?.clear();
     void cacheMessage(message);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSending(true);
-    const history = messages;
-    const assistantId = Crypto.randomUUID();
-    addMessage({ ...message, id: assistantId, role: 'assistant', content: '' });
     void sendHostMessage(
       history,
       message,
-      (chunk) => useAppStore.setState((state) => ({ messages: state.messages.map((item) => item.id === assistantId ? { ...item, content: item.content + chunk } : item) })),
-      (id, finalContent) => useAppStore.setState((state) => ({ messages: state.messages.map((item) => item.id === assistantId ? { ...item, id, content: finalContent } : item) })),
-    ).catch(() => useAppStore.setState((state) => ({ messages: state.messages.filter((item) => item.id !== assistantId) }))).finally(() => setSending(false));
+      (chunk) => useAppStore.setState((state) => ({
+        messages: state.messages.map((item) => item.id === assistantId ? { ...item, content: item.content + chunk } : item),
+      })),
+      (id, finalContent) => useAppStore.setState((state) => ({
+        messages: state.messages.map((item) => item.id === assistantId ? { ...item, id, content: finalContent } : item),
+      })),
+    ).catch(() => useAppStore.setState((state) => ({
+      messages: state.messages.filter((item) => item.id !== assistantId),
+    }))).finally(() => setSending(false));
   };
 
   return (
     <VStack spacing={0}>
-      <List modifiers={[listStyle('plain')]}>
-        <Section title={activeAgent?.name ?? 'Conversation'}>
-          {messages.length ? messages.map((message) => (
-            <HStack
-              key={message.id}
-              modifiers={[frame({ alignment: message.role === 'user' ? 'trailing' : 'leading' })]}
-            >
-              <RNHostView matchContents>
-                <MarkdownMessage content={message.content} isUser={message.role === 'user'} />
-              </RNHostView>
-            </HStack>
-          )) : <Label title="No messages yet" systemImage="bubble.left" />}
-        </Section>
-      </List>
-      <HStack spacing={8} modifiers={[padding({ horizontal: 16, vertical: 10 })]}>
-        <TextField
-          ref={inputRef}
-          placeholder="Message host"
-          text={nativeDraft}
-          onTextChange={setDraft}
-          modifiers={[textFieldStyle('roundedBorder'), frame({ minHeight: 40 })]}
-        />
-        <Button
-          label="Send"
-          systemImage="arrow.up.circle.fill"
-          onPress={send}
-          modifiers={[buttonStyle('borderedProminent'), controlSize('regular'), tint('#0A84FF')]}
-        />
-      </HStack>
+      <ScrollView showsIndicators={false}>
+        <VStack spacing={0} modifiers={[padding({ horizontal: 24, top: 18, bottom: 18 })]}>
+          {messages.length ? (
+            <Section title={activeAgent?.name ?? 'Conversation'}>
+              {messages.map((message) => (
+                <HStack key={message.id} modifiers={[padding({ vertical: 5 })]}>
+                  <RNHostView matchContents>
+                    <MarkdownMessage content={message.content} isUser={message.role === 'user'} />
+                  </RNHostView>
+                </HStack>
+              ))}
+            </Section>
+          ) : (
+            <QuickStarts onSelect={setDraft} />
+          )}
+        </VStack>
+      </ScrollView>
+
+      <Composer
+        draft={nativeDraft}
+        inputRef={inputRef}
+        sending={sending}
+        onChange={setDraft}
+        onSend={send}
+      />
     </VStack>
   );
 }
 
-function ActivityTab() {
+function QuickStarts({ onSelect }: { onSelect: (value: string) => void }) {
   return (
-    <List modifiers={[listStyle('insetGrouped')]}>
-      <Section title="Needs your attention">
-        <Button label="Approve build cleanup" systemImage="checkmark.circle" />
-      </Section>
-      <Section title="Recent">
-        <Label title="Agent completed a task" systemImage="checkmark.circle.fill" />
-        <Label title="Studio Mac connected" systemImage="bolt.fill" />
-      </Section>
-    </List>
+    <VStack spacing={22} modifiers={[padding({ top: 180, horizontal: 4 })]}>
+      <QuickStart icon="photo.on.rectangle.angled" label="Create an image" onPress={() => onSelect('Create an image')} />
+      <QuickStart icon="pencil" label="Write or edit" onPress={() => onSelect('Help me write or edit')} />
+      <QuickStart icon="globe" label="Search the web" onPress={() => onSelect('Search the web for ')} />
+    </VStack>
+  );
+}
+
+function QuickStart({ icon, label, onPress }: { icon: 'photo.on.rectangle.angled' | 'pencil' | 'globe'; label: string; onPress: () => void }) {
+  return (
+    <Button
+      onPress={() => {
+        onPress();
+        void Haptics.selectionAsync();
+      }}
+      modifiers={[buttonStyle('plain'), accessibilityLabel(label)]}
+    >
+      <HStack spacing={18} alignment="center">
+        <Image systemName={icon} size={28} modifiers={[foregroundStyle('secondary')]} />
+        <Text modifiers={[font({ textStyle: 'title3' }), foregroundStyle('secondary')]}>{label}</Text>
+      </HStack>
+    </Button>
+  );
+}
+
+function Composer({
+  draft,
+  inputRef,
+  sending,
+  onChange,
+  onSend,
+}: {
+  draft: ReturnType<typeof useNativeState<string>>;
+  inputRef: RefObject<TextFieldRef | null>;
+  sending: boolean;
+  onChange: (value: string) => void;
+  onSend: () => void;
+}) {
+  return (
+    <GlassEffectContainer spacing={10} modifiers={[padding({ horizontal: 14, bottom: 10, top: 5 })]}>
+      <HStack
+        spacing={9}
+        modifiers={[
+          padding({ horizontal: 10, vertical: 7 }),
+          glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' }),
+        ]}
+      >
+        <Button
+          label=""
+          systemImage="plus"
+          modifiers={[buttonStyle('plain'), controlSize('large'), accessibilityLabel('Add attachment')]}
+        />
+        <TextField
+          ref={inputRef}
+          placeholder="Ask Poly"
+          text={draft}
+          onTextChange={onChange}
+          modifiers={[textFieldStyle('plain'), frame({ minHeight: 38 })]}
+        />
+        <Spacer />
+        <Button
+          label=""
+          systemImage="mic"
+          modifiers={[buttonStyle('plain'), controlSize('large'), accessibilityLabel('Dictate message')]}
+        />
+        <Button
+          label=""
+          systemImage="waveform"
+          onPress={onSend}
+          modifiers={[
+            buttonStyle('glassProminent'),
+            buttonBorderShape('circle'),
+            tint('#AF52DE'),
+            disabled(sending),
+            accessibilityLabel('Send message'),
+          ]}
+        />
+      </HStack>
+    </GlassEffectContainer>
   );
 }
