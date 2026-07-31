@@ -9,14 +9,14 @@ permissions:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 22.13.x
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -41,6 +41,9 @@ jobs:
 
       - name: Install CocoaPods
         run: pod install --project-directory=ios
+        env:
+          RCT_USE_PREBUILT_RNCORE: "0"
+          RCT_USE_RN_DEP: "0"
 
       - name: Resolve workspace and scheme
         run: |
