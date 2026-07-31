@@ -1,0 +1,33 @@
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { StyleSheet, Text, View } from 'react-native';
+
+export function PairingCamera({ onScanned }: { onScanned: (data: string) => void }) {
+  const [permission, requestPermission] = useCameraPermissions();
+
+  if (!permission?.granted) {
+    return (
+      <View style={styles.permission}>
+        <Text style={styles.permissionText}>Camera access is needed to scan a host QR code.</Text>
+        <Text onPress={() => void requestPermission()} style={styles.permissionAction}>
+          Allow Camera
+        </Text>
+      </View>
+    );
+  }
+
+  const handleScan = ({ data }: BarcodeScanningResult) => onScanned(data);
+  return (
+    <CameraView
+      style={styles.camera}
+      barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+      onBarcodeScanned={handleScan}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  camera: { width: '100%', height: 260, borderRadius: 20, overflow: 'hidden' },
+  permission: { alignItems: 'center', justifyContent: 'center', minHeight: 180, padding: 24, gap: 12 },
+  permissionText: { color: '#3c3c43', fontSize: 16, textAlign: 'center' },
+  permissionAction: { color: '#007aff', fontSize: 16, fontWeight: '600' },
+});
