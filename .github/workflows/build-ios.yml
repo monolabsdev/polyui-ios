@@ -92,7 +92,8 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :DEV_CLIENT_TRY_TO_LAUNCH_LAST_BUNDLE' "$APP/Info.plist")" = "false"
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' "$APP/Info.plist")" = "true"
           /usr/libexec/PlistBuddy -c 'Print :NSBonjourServices' "$APP/Info.plist" | grep -q '_expo._tcp'
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$APP/Info.plist" | grep -q 'exp+polyuiios'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$APP/Info.plist" | grep -qF 'exp+polyui-ios' ||
+            { echo "::error::CFBundleURLTypes missing exp+polyui-ios scheme"; exit 1; }
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$APP/Info.plist"
           printf 'Debug app: %s\nExecutable: %s\n' "$APP" "$BINARY"
           echo "APP=$APP" >> "$GITHUB_ENV"
