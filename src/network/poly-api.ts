@@ -3,10 +3,17 @@ import * as Crypto from 'expo-crypto';
 import { fetch } from 'expo/fetch';
 import { z } from 'zod';
 
+import {
+  applyConversationSync,
+  clearSyncedHost,
+  loadSyncedConversations,
+  loadSyncedMessages,
+} from '@/data/conversation-cache';
 import { chatMessageSchema, relayPairingPayloadSchema, type Agent, type ChatMessage } from '@/domain/poly';
 import { createSessionKeyPair } from '@/security/session-crypto';
 import { relayRequest, type RelaySession } from '@/network/relay-client';
 import { createStreamEventParser, readResponseStream } from '@/network/stream-events';
+import { conversationsNeedingMessages } from '@/utils/conversation-sync';
 
 const hostKey = 'poly.paired-host.v2';
 const hostRuntimeSchema = z.discriminatedUnion('kind', [
@@ -41,6 +48,20 @@ export type AgentApproval = {
   paths?: string[];
   cwd?: string;
 };
+export type AgentActivity = {
+  kind: 'reasoning' | 'plan' | 'task' | 'terminal' | 'file' | 'reconnecting';
+  status?: string;
+  text?: string;
+  command?: string;
+  paths?: string[];
+  cwd?: string;
+};
+
+export class HostJobPendingError extends Error {
+  constructor(public readonly requestId: string) {
+    super('Poly stream disconnected. Desktop job is still running.');
+  }
+}
 
 const hostSessionSchema = z.discriminatedUnion('mode', [
   z.object({
@@ -54,8 +75,25 @@ const hostSessionSchema = z.discriminatedUnion('mode', [
 ]);
 type HostSession = z.infer<typeof hostSessionSchema>;
 
-const conversationsSchema = z.object({ ok: z.literal(true), conversations: z.array(z.object({ id: z.string(), title: z.string() })) });
+const hostConversationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  isArchived: z.boolean(),
+  runtime: hostRuntimeSchema.nullable().catch(null),
+});
+const conversationsSchema = z.object({ ok: z.literal(true), conversations: z.array(hostConversationSchema) });
 const messagesSchema = z.object({ ok: z.literal(true), messages: z.array(z.object({ id: z.string(), conversationId: z.string(), role: z.enum(['user', 'assistant', 'system']), content: z.string(), createdAt: z.string().datetime(), model: z.string().nullable().optional(), provider: z.string().nullable().optional() })) });
+export type HostConversation = z.infer<typeof hostConversationSchema>;
+type ConversationSyncResult = {
+  conversations: HostConversation[];
+  selectedConversationId: string | null;
+  lastSyncedAt: string | null;
+  syncedCount: number;
+};
+let conversationSync: Promise<ConversationSyncResult> | null = null;
+let conversationSyncHostId: string | null = null;
 
 export async function loadPairedHost() {
   const value = await SecureStore.getItemAsync(hostKey);
@@ -64,7 +102,12 @@ export async function loadPairedHost() {
 }
 
 async function saveHost(host: HostSession) {
+  const previous = await loadPairedHost();
   await SecureStore.setItemAsync(hostKey, JSON.stringify(host), { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+  if (previous && previous.id !== host.id) {
+    if (conversationSyncHostId === previous.id) await conversationSync?.catch(() => undefined);
+    await clearSyncedHost(previous.id);
+  }
   return host;
 }
 
@@ -117,8 +160,21 @@ async function request(host: HostSession, path: string, init?: RequestInit, onSt
 }
 
 async function json<T>(response: { status: number; body: string }, schema: z.ZodType<T>) {
-  if (response.status < 200 || response.status >= 300) throw new Error(`Poly host request failed (${response.status}).`);
-  const value = JSON.parse(response.body) as unknown;
+  let value: unknown;
+  try {
+    value = JSON.parse(response.body) as unknown;
+  } catch (cause) {
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Poly host request failed (${response.status}).`);
+    }
+    throw cause;
+  }
+  if (response.status < 200 || response.status >= 300) {
+    const error = z.object({ error: z.string().optional() }).safeParse(value);
+    throw new Error(error.success && error.data.error
+      ? error.data.error
+      : `Poly host request failed (${response.status}).`);
+  }
   const result = (value as { ok?: boolean }).ok === false ? z.object({ error: z.string().optional() }).parse(value) : value;
   if ((result as { error?: string }).error) throw new Error((result as { error: string }).error);
   return schema.parse(value);
@@ -194,6 +250,115 @@ export async function fetchHostRuntimes() {
   return { runtimes: result.runtimes, selectedRuntime };
 }
 
+export async function fetchHostConversations() {
+  const host = await loadPairedHost();
+  if (!host) {
+    return {
+      conversations: [] as HostConversation[],
+      selectedConversationId: null as string | null,
+      lastSyncedAt: null as string | null,
+    };
+  }
+  const stored = await loadSyncedConversations(host.id);
+  return {
+    ...stored,
+    selectedConversationId: host.conversationId,
+  };
+}
+
+export async function syncHostConversations(): Promise<ConversationSyncResult> {
+  const host = await loadPairedHost();
+  if (!host) {
+    return { conversations: [], selectedConversationId: null, lastSyncedAt: null, syncedCount: 0 };
+  }
+  if (conversationSync && conversationSyncHostId === host.id) return conversationSync;
+  const current = performConversationSync(host).finally(() => {
+    if (conversationSync !== current) return;
+    conversationSync = null;
+    conversationSyncHostId = null;
+  });
+  conversationSync = current;
+  conversationSyncHostId = host.id;
+  return current;
+}
+
+async function performConversationSync(host: HostSession): Promise<ConversationSyncResult> {
+  const [remote, local] = await Promise.all([
+    json(await request(host, '/api/conversations'), conversationsSchema),
+    loadSyncedConversations(host.id),
+  ]);
+  const changed = conversationsNeedingMessages(remote.conversations, local.conversations);
+  const messagesByConversation = new Map<string, ChatMessage[]>();
+  // ponytail: sequential fetching protects slow relays; add bounded concurrency if large libraries prove slow.
+  for (const conversation of changed) {
+    messagesByConversation.set(
+      conversation.id,
+      await fetchMessages(host, conversation.id),
+    );
+  }
+  const syncedAt = new Date().toISOString();
+  if ((await loadPairedHost())?.id !== host.id) {
+    return { conversations: [], selectedConversationId: null, lastSyncedAt: null, syncedCount: 0 };
+  }
+  await applyConversationSync(host.id, remote.conversations, messagesByConversation, syncedAt);
+  return {
+    conversations: remote.conversations,
+    selectedConversationId: host.conversationId,
+    lastSyncedAt: syncedAt,
+    syncedCount: changed.length,
+  };
+}
+
+export async function selectHostConversation(conversation: HostConversation): Promise<void> {
+  const host = await loadPairedHost();
+  if (!host) throw new Error('Pair a Poly host first.');
+  await saveHost({
+    ...host,
+    conversationId: conversation.id,
+    isTemporary: false,
+    ...(conversation.runtime ? {
+      runtime: conversation.runtime,
+      model: conversation.runtime.kind === 'chat-model' ? conversation.runtime.model_id : conversation.runtime.agent_kind === 'codex' ? 'Codex' : 'Claude Code',
+      providerType: conversation.runtime.kind === 'chat-model' ? host.providerType : conversation.runtime.agent_kind,
+      connectionId: conversation.runtime.kind === 'chat-model' ? conversation.runtime.connection_id : null,
+    } : {}),
+  });
+}
+
+export async function renameHostConversation(id: string, title: string): Promise<void> {
+  const host = await loadPairedHost();
+  if (!host) throw new Error('Pair a Poly host first.');
+  await json(
+    await request(host, '/api/conversations', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, title }),
+    }),
+    z.object({ ok: z.literal(true) }),
+  );
+}
+
+export async function deleteHostConversation(id: string): Promise<void> {
+  const host = await loadPairedHost();
+  if (!host) throw new Error('Pair a Poly host first.');
+  await json(
+    await request(host, '/api/conversations', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }),
+    z.object({ ok: z.literal(true) }),
+  );
+  if (host.conversationId !== id) return;
+  const remaining = await json(await request(host, '/api/conversations'), conversationsSchema);
+  const next = remaining.conversations.find((conversation) => !conversation.isArchived);
+  if (next) {
+    await selectHostConversation(next);
+  } else {
+    await saveHost({ ...host, conversationId: Crypto.randomUUID(), isTemporary: false });
+  }
+}
+
 export async function selectHostRuntime(choice: RuntimeChoice): Promise<void> {
   const host = await loadPairedHost();
   if (!host) throw new Error('Pair a Poly host first.');
@@ -212,6 +377,19 @@ export async function approveHostRequest(approval: AgentApproval, approved: bool
         approval_id: approval.approvalId,
         approved,
       }),
+    }),
+    z.object({ ok: z.literal(true) }),
+  );
+}
+
+export async function cancelHostRequest(requestId: string): Promise<void> {
+  const host = await loadPairedHost();
+  if (!host) throw new Error('Pair a Poly host first.');
+  await json(
+    await request(host, '/api/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ request_id: requestId }),
     }),
     z.object({ ok: z.literal(true) }),
   );
@@ -237,7 +415,23 @@ export async function updateHostPushToken(
 export async function loadHostMessages(): Promise<ChatMessage[]> {
   const host = await loadPairedHost();
   if (!host) return [];
-  const result = await json(await request(host, `/api/messages?conversationId=${encodeURIComponent(host.conversationId)}`), messagesSchema);
+  const messages = await fetchMessages(host, host.conversationId);
+  if ((await loadPairedHost())?.conversationId !== host.conversationId) {
+    throw new Error('Chat changed while messages were loading.');
+  }
+  return messages;
+}
+
+export async function loadStoredHostMessages(conversationId: string): Promise<ChatMessage[]> {
+  const host = await loadPairedHost();
+  return host ? loadSyncedMessages(host.id, conversationId) : [];
+}
+
+async function fetchMessages(host: HostSession, conversationId: string) {
+  const result = await json(
+    await request(host, `/api/messages?conversationId=${encodeURIComponent(conversationId)}`),
+    messagesSchema,
+  );
   return result.messages.map((message) => chatMessageSchema.parse({ ...message, agentId: host.id }));
 }
 
@@ -245,7 +439,10 @@ export async function sendHostMessage(
   history: ChatMessage[],
   userMessage: ChatMessage,
   onChunk: (chunk: string) => void,
+  onSnapshot: (content: string) => void,
   onDone: (id: string, content: string) => void,
+  onStarted: (requestId: string) => void,
+  onActivity: (activity: AgentActivity) => void,
   onApproval: (approval: AgentApproval) => void,
 ) {
   const host = await loadPairedHost();
@@ -255,21 +452,63 @@ export async function sendHostMessage(
   }
   await json(await request(host, '/api/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: userMessage.id, conversation_id: host.conversationId, role: 'user', content: userMessage.content, model: host.model, provider: host.providerType, is_temporary: host.isTemporary }) }), z.object({ ok: z.literal(true) }));
   let finalContent = '';
-  const consume = createStreamEventParser(({ event, data }) => {
-    const body = JSON.parse(data) as { content?: string; id?: string; error?: string } & Partial<AgentApproval>;
+  let requestId: string | null = null;
+  let done = false;
+  let terminalError: Error | null = null;
+  const consume = () => createStreamEventParser(({ event, data }) => {
+    const body = JSON.parse(data) as { content?: string; id?: string; error?: string; requestId?: string } & Partial<AgentActivity> & Partial<AgentApproval>;
+    if (event === 'started' && body.requestId) {
+      requestId = body.requestId;
+      onStarted(body.requestId);
+    }
+    if (event === 'snapshot') {
+      finalContent = body.content ?? '';
+      onSnapshot(finalContent);
+    }
     if (event === 'chunk') { finalContent += body.content ?? ''; onChunk(body.content ?? ''); }
+    if (event === 'reasoning') onActivity({ kind: 'reasoning', status: 'running' });
+    if (event === 'activity' && body.kind) onActivity(body as AgentActivity);
     if (event === 'done') {
+      done = true;
       finalContent = body.content || finalContent;
       onDone(body.id ?? Crypto.randomUUID(), finalContent);
     }
     if (event === 'approval' && body.requestId && body.approvalId) {
       onApproval({ ...body, requestId: body.requestId, approvalId: body.approvalId });
     }
-    if (event === 'error') throw new Error(body.error ?? 'Poly host chat failed.');
+    if (event === 'error') {
+      terminalError = new Error(body.error ?? 'Poly host chat failed.');
+      throw terminalError;
+    }
   });
-  const response = await request(host, '/api/chat-stream', { method: 'POST', headers: { accept: 'text/event-stream', 'content-type': 'application/json' }, body: JSON.stringify({ model: host.model, messages: [...history, userMessage].map(({ role, content }) => ({ role, content })), conversation_id: host.conversationId, is_temporary: host.isTemporary, provider_type: host.providerType, provider_config_id: host.providerConfigId, connection_id: host.connectionId, runtime: host.runtime }) }, consume);
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(`Poly host request failed (${response.status}).`);
+  const initial = { method: 'POST', headers: { accept: 'text/event-stream', 'content-type': 'application/json' }, body: JSON.stringify({ model: host.model, messages: [...history, userMessage].map(({ role, content }) => ({ role, content })), conversation_id: host.conversationId, is_temporary: host.isTemporary, provider_type: host.providerType, provider_config_id: host.providerConfigId, connection_id: host.connectionId, runtime: host.runtime }) };
+  try {
+    const response = await request(host, '/api/chat-stream', initial, consume());
+    if (response.status < 200 || response.status >= 300) throw new Error(`Poly host request failed (${response.status}).`);
+  } catch (cause) {
+    if (terminalError || !requestId) throw terminalError ?? cause;
+  }
+  for (const delay of [500, 1_000, 2_000, 4_000, 8_000]) {
+    if (done || terminalError || !requestId) break;
+    onActivity({ kind: 'reconnecting', status: 'running' });
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      const response = await request(
+        host,
+        `/api/job-stream?requestId=${encodeURIComponent(requestId)}`,
+        { headers: { accept: 'text/event-stream' } },
+        consume(),
+      );
+      if (response.status < 200 || response.status >= 300) throw new Error(`Poly host request failed (${response.status}).`);
+    } catch (cause) {
+      if (terminalError) throw terminalError;
+      if (delay === 8_000) throw cause;
+    }
+  }
+  if (!done && terminalError) throw terminalError;
+  if (!done) {
+    if (requestId) throw new HostJobPendingError(requestId);
+    throw new Error('Poly stream ended before the desktop job started.');
   }
 }
 
@@ -292,4 +531,11 @@ async function ensureConversationOnHost(host: HostSession): Promise<void> {
   );
 }
 
-export async function forgetPairedHost() { await SecureStore.deleteItemAsync(hostKey); }
+export async function forgetPairedHost() {
+  const host = await loadPairedHost();
+  await SecureStore.deleteItemAsync(hostKey);
+  if (host) {
+    if (conversationSyncHostId === host.id) await conversationSync?.catch(() => undefined);
+    await clearSyncedHost(host.id);
+  }
+}

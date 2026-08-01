@@ -23,6 +23,7 @@ import {
 import { type Agent } from '@/domain/poly';
 import { useHostReveal } from '@/hooks/use-host-reveal';
 import { type RuntimeChoice } from '@/network/poly-api';
+import { type OnDeviceModel } from '@/services/on-device-ai';
 import { hapticPress } from '@/utils/haptics';
 
 const HEADER_BUTTON_SIZE = 36;
@@ -41,10 +42,15 @@ export function ChatHeader({
   isTemporary,
   runtimes,
   selectedRuntime,
+  onDeviceModels,
+  selectedOnDeviceModel,
+  generationActive,
   onPair,
+  onChats,
   onSettings,
   onNewConversation,
   onSelectRuntime,
+  onSelectOnDeviceModel,
   onToggleTemporary,
 }: {
   agents: Agent[];
@@ -53,10 +59,15 @@ export function ChatHeader({
   isTemporary: boolean;
   runtimes: RuntimeChoice[];
   selectedRuntime: RuntimeChoice | null;
+  onDeviceModels: OnDeviceModel[];
+  selectedOnDeviceModel: OnDeviceModel | null;
+  generationActive: boolean;
   onPair: () => void;
+  onChats: () => void;
   onSettings: () => void;
   onNewConversation: () => void;
   onSelectRuntime: (runtime: RuntimeChoice) => void;
+  onSelectOnDeviceModel: (model: OnDeviceModel) => void;
   onToggleTemporary: () => void;
 }) {
   const { revealed: hostRevealed, reveal: revealHost } = useHostReveal();
@@ -90,13 +101,20 @@ export function ChatHeader({
             label="New chat"
             systemImage="square.and.pencil"
             onPress={() => hapticPress(onNewConversation)}
-            modifiers={[disabled(!hasMessages)]}
+            modifiers={[disabled(!hasMessages || generationActive)]}
           />
 
           <Button
             label="Pair a host"
             systemImage="qrcode.viewfinder"
             onPress={() => hapticPress(onPair)}
+          />
+
+          <Button
+            label="Chats"
+            systemImage="bubble.left.and.bubble.right"
+            onPress={() => hapticPress(onChats)}
+            modifiers={[disabled(!agents[0] || generationActive)]}
           />
 
           <Button
@@ -130,7 +148,7 @@ export function ChatHeader({
                     lineLimit(1),
                   ]}
                 >
-                  {selectedRuntime?.label ?? 'Chat'}
+                  {selectedOnDeviceModel?.label ?? selectedRuntime?.label ?? 'Chat'}
                 </Text>
 
                 <Image
@@ -143,12 +161,12 @@ export function ChatHeader({
           }
           modifiers={[
             buttonStyle('plain'),
-            accessibilityLabel(`Choose runtime. Current: ${selectedRuntime?.label ?? 'none'}`),
+            accessibilityLabel(`Choose runtime. Current: ${selectedOnDeviceModel?.label ?? selectedRuntime?.label ?? 'none'}`),
           ]}
         >
           <Button
-            label={agents[0]?.name ?? 'No host paired'}
-            systemImage="desktopcomputer"
+            label={agents[0]?.name ?? (selectedOnDeviceModel ? 'On this iPhone' : 'No host paired')}
+            systemImage={selectedOnDeviceModel ? 'iphone' : 'desktopcomputer'}
           />
 
           {agents[0] ? (
@@ -193,12 +211,26 @@ export function ChatHeader({
                       ? 'checkmark'
                       : runtime.kind === 'coding-agent' ? 'terminal' : 'cpu'}
                     onPress={() => hapticPress(() => onSelectRuntime(runtime))}
-                    modifiers={[disabled(!runtime.available || !runtime.runtime)]}
+                    modifiers={[disabled(!runtime.available || !runtime.runtime || generationActive)]}
                   />
                 ))}
               </Section>
             ) : null;
           })}
+
+          {onDeviceModels.length ? (
+            <Section title="On this iPhone">
+              {onDeviceModels.map((model) => (
+                <Button
+                  key={model.id}
+                  label={`${model.label} · ${model.detail}`}
+                  systemImage={selectedOnDeviceModel?.id === model.id ? 'checkmark' : 'cpu'}
+                  onPress={() => hapticPress(() => onSelectOnDeviceModel(model))}
+                  modifiers={[disabled(!model.available || generationActive)]}
+                />
+              ))}
+            </Section>
+          ) : null}
         </Menu>
 
         <Spacer />
@@ -209,6 +241,7 @@ export function ChatHeader({
             modifiers={[
               buttonStyle('glass'),
               buttonBorderShape('circle'),
+              disabled(generationActive),
               accessibilityLabel('New conversation'),
             ]}
           >

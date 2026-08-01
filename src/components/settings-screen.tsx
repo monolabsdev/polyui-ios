@@ -6,6 +6,7 @@ import {
   Image,
   Label,
   LabeledContent,
+  ProgressView,
   Section,
   Spacer,
   Text,
@@ -16,6 +17,7 @@ import {
   accessibilityLabel,
   buttonBorderShape,
   buttonStyle,
+  disabled,
   font,
   foregroundStyle,
   frame,
@@ -30,8 +32,10 @@ import { Alert, PlatformColor } from 'react-native';
 import { clearCachedMessages } from '@/data/conversation-cache';
 import { useNetworkStatus } from '@/hooks/use-network-status';
 import { useNotificationsPreference } from '@/hooks/use-notifications-preference';
+import { useOnDeviceModels } from '@/hooks/use-on-device-models';
 import { forgetPairedHost } from '@/network/poly-api';
 import { authenticateDevice, getOrCreateDeviceIdentity, rotateDeviceIdentity } from '@/security/device-identity';
+import { ON_DEVICE_AGENT_ID } from '@/services/on-device-ai';
 import { useAppStore } from '@/state/app-store';
 import { hapticPress } from '@/utils/haptics';
 
@@ -40,6 +44,7 @@ export default function SettingsScreen() {
   const queryClient = useQueryClient();
   const network = useNetworkStatus();
   const { enabled: notifications, enable: enableNotifications } = useNotificationsPreference();
+  const onDevice = useOnDeviceModels();
 
   const unlock = async () => {
     if (await authenticateDevice()) await getOrCreateDeviceIdentity();
@@ -48,7 +53,7 @@ export default function SettingsScreen() {
   const forgetHost = async () => {
     const agentId = useAppStore.getState().activeAgentId;
     await forgetPairedHost();
-    if (agentId) await clearCachedMessages(agentId);
+    if (agentId && agentId !== ON_DEVICE_AGENT_ID) await clearCachedMessages(agentId);
     useAppStore.setState({
       messages: [],
       activeAgentId: null,
@@ -121,6 +126,60 @@ export default function SettingsScreen() {
             <LabeledContent label="Network">
               <Text modifiers={[foregroundStyle('secondary')]}>{network}</Text>
             </LabeledContent>
+          </Section>
+          <Section title="On-device AI">
+            {onDevice.loading ? <ProgressView /> : null}
+            {onDevice.models.map((model) => {
+              const downloading = onDevice.downloadingId === model.id;
+              if (downloading) {
+                return (
+                  <Button
+                    key={model.id}
+                    onPress={() => hapticPress(() => void onDevice.cancelDownload())}
+                    modifiers={[accessibilityLabel(`Cancel downloading ${model.label}`)]}
+                  >
+                    <HStack spacing={8}>
+                      <ProgressView value={onDevice.downloadProgress} />
+                      <Text>{model.label} · {Math.round(onDevice.downloadProgress * 100)}%</Text>
+                    </HStack>
+                  </Button>
+                );
+              }
+              if (model.downloadable && model.status === 'not-downloaded') {
+                return (
+                  <Button
+                    key={model.id}
+                    label={model.meetsRequirements ? `Download ${model.label} · ${model.detail}` : `${model.label} · Not enough memory`}
+                    systemImage="arrow.down.circle"
+                    onPress={() => hapticPress(() => void onDevice.downloadModel(model))}
+                    modifiers={[disabled(!model.meetsRequirements)]}
+                  />
+                );
+              }
+              return (
+                <VStack key={model.id} spacing={0}>
+                  <Button
+                    label={`${model.label} · ${model.detail}`}
+                    systemImage={onDevice.selectedModel?.id === model.id ? 'checkmark' : 'cpu'}
+                    onPress={() => hapticPress(() => void onDevice.selectModel(model).catch(() => undefined))}
+                    modifiers={[disabled(!model.available || onDevice.generationActive)]}
+                  />
+                  {model.downloadable ? (
+                    <Button
+                      label={`Remove ${model.label}`}
+                      systemImage="trash"
+                      role="destructive"
+                      onPress={() => hapticPress(() => void onDevice.deleteModel(model))}
+                      modifiers={[disabled(onDevice.generationActive)]}
+                    />
+                  ) : null}
+                </VStack>
+              );
+            })}
+            {onDevice.error ? <Text modifiers={[foregroundStyle('secondary')]}>{onDevice.error}</Text> : null}
+            {!onDevice.loading && !onDevice.models.length ? (
+              <Text modifiers={[foregroundStyle('secondary')]}>On-device AI is unavailable in this build or on this device.</Text>
+            ) : null}
           </Section>
           <Section title="Host">
             <Button

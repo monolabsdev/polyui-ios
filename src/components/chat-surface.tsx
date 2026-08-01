@@ -1,6 +1,7 @@
 import {
   HStack,
   Image,
+  ProgressView,
   ScrollView,
   Text,
   type TextFieldRef,
@@ -14,6 +15,7 @@ import {
   foregroundStyle,
   frame,
   id,
+  lineLimit,
   onTapGesture,
   padding,
   scrollDismissesKeyboard,
@@ -28,6 +30,8 @@ import { MessageBubble } from '@/components/message-bubble';
 import { type Agent } from '@/domain/poly';
 import { useConversation } from '@/hooks/use-conversation';
 import { useHostReveal } from '@/hooks/use-host-reveal';
+import { type AgentActivity } from '@/network/poly-api';
+import { type OnDeviceModel } from '@/services/on-device-ai';
 import { useAppStore } from '@/state/app-store';
 import { shouldAutoScrollToBottom } from '@/utils/chat-behavior';
 
@@ -35,12 +39,14 @@ export function ChatSurface({
   agents,
   isError,
   reconnecting,
+  onDeviceModel,
 }: {
   agents: Agent[];
   isError: boolean;
   reconnecting: boolean;
+  onDeviceModel: OnDeviceModel | null;
 }) {
-  const connected = Boolean(agents[0]) && !isError;
+  const connected = Boolean(onDeviceModel) || (Boolean(agents[0]) && !isError);
   const activeAgentId = useAppStore(
     (state) => state.activeAgentId,
   );
@@ -49,9 +55,13 @@ export function ChatSurface({
   const {
     messages,
     sending,
+    canStop,
+    activity,
     error,
+    canRetry,
     sendMessage,
     retry,
+    stop,
   } = useConversation(activeAgentId);
 
   const inputRef = useRef<TextFieldRef>(null);
@@ -157,10 +167,10 @@ export function ChatSurface({
                 font({ textStyle: 'footnote' }),
                 foregroundStyle('secondary'),
                 padding({ top: 4, bottom: 12 }),
-                onTapGesture(() => retry()),
+                ...(canRetry ? [onTapGesture(() => retry())] : []),
               ]}
             >
-              {error} · Tap to retry
+              {error}{canRetry ? ' · Tap to retry' : ''}
             </Text>
           ) : null}
 
@@ -182,6 +192,27 @@ export function ChatSurface({
           }),
         ]}
       >
+        {sending && activity ? (
+          <HStack
+            spacing={6}
+            modifiers={[
+              frame({ maxWidth: Infinity, alignment: 'leading' }),
+              padding({ bottom: 5 }),
+            ]}
+          >
+            <ProgressView />
+            <Text
+              modifiers={[
+                font({ textStyle: 'caption2' }),
+                foregroundStyle('secondary'),
+                lineLimit(1),
+              ]}
+            >
+              {activityLabel(activity)}
+            </Text>
+          </HStack>
+        ) : null}
+
         <HStack
           alignment="center"
           spacing={4}
@@ -190,7 +221,7 @@ export function ChatSurface({
               maxWidth: Infinity,
               alignment: 'leading',
             }),
-            ...(connected && !hostRevealed
+            ...(connected && !onDeviceModel && !hostRevealed
               ? [onTapGesture(() => void revealHost())]
               : []),
           ]}
@@ -203,7 +234,30 @@ export function ChatSurface({
             ]}
           />
 
-          {connected ? (
+          {onDeviceModel ? (
+            <>
+              <Text
+                modifiers={[
+                  font({
+                    textStyle: 'caption2',
+                  }),
+                  foregroundStyle('secondary'),
+                ]}
+              >
+                On-device ·
+              </Text>
+              <Text
+                modifiers={[
+                  font({
+                    textStyle: 'caption2',
+                  }),
+                  foregroundStyle('secondary'),
+                ]}
+              >
+                {onDeviceModel.label}
+              </Text>
+            </>
+          ) : connected ? (
             <>
               <Text
                 modifiers={[
@@ -261,9 +315,19 @@ export function ChatSurface({
           draft={draft}
           inputRef={inputRef}
           sending={sending}
+          canStop={canStop}
           onSend={send}
+          onStop={stop}
         />
       </VStack>
     </VStack>
   );
+}
+
+function activityLabel(activity: AgentActivity) {
+  if (activity.kind === 'reasoning') return 'Thinking';
+  if (activity.kind === 'reconnecting') return 'Reconnecting to response';
+  if (activity.kind === 'terminal') return activity.command ? `Running ${activity.command}` : 'Running command';
+  if (activity.kind === 'file') return activity.paths?.[0] ? `Editing ${activity.paths[0]}` : 'Editing files';
+  return activity.text || (activity.kind === 'plan' ? 'Updating plan' : 'Working');
 }

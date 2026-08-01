@@ -2,6 +2,8 @@ import 'expo-sqlite/localStorage/install';
 
 const NOTIFICATIONS_KEY = 'poly.notifications-enabled';
 const PUSH_REGISTRATION_KEY = 'poly.push-registration';
+const ON_DEVICE_MODEL_KEY = 'poly.on-device-model';
+const ON_DEVICE_MODE_KEY = 'poly.on-device-mode';
 
 export type PushRegistration = {
   token: string;
@@ -32,4 +34,21 @@ export function getPushRegistration(): PushRegistration | null {
 export function setPushRegistration(registration: PushRegistration | null): void {
   if (registration) localStorage.setItem(PUSH_REGISTRATION_KEY, JSON.stringify(registration));
   else localStorage.removeItem(PUSH_REGISTRATION_KEY);
+}
+
+export function getOnDeviceModelId(): string | null {
+  return localStorage.getItem(ON_DEVICE_MODEL_KEY);
+}
+
+export function setOnDeviceModelId(modelId: string | null): void {
+  if (modelId) localStorage.setItem(ON_DEVICE_MODEL_KEY, modelId);
+  else localStorage.removeItem(ON_DEVICE_MODEL_KEY);
+}
+
+export function getOnDeviceMode(): boolean {
+  return localStorage.getItem(ON_DEVICE_MODE_KEY) === 'true';
+}
+
+export function setOnDeviceMode(enabled: boolean): void {
+  localStorage.setItem(ON_DEVICE_MODE_KEY, String(enabled));
 }

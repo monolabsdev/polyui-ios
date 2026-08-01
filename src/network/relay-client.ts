@@ -17,6 +17,8 @@ export type RelaySession = {
 };
 
 type RelayResponse = { status: number; body: string };
+const RELAY_HANDSHAKE_TIMEOUT_MS = 30_000;
+const RELAY_IDLE_TIMEOUT_MS = 45_000;
 
 function websocketUrl(value: string) {
   const url = new URL(value);
@@ -30,12 +32,25 @@ export function relayRequest(
   session: RelaySession,
   request: { method: string; path: string; body?: string },
   onStream?: (data: string) => void,
+  timeouts = {
+    handshake: RELAY_HANDSHAKE_TIMEOUT_MS,
+    idle: RELAY_IDLE_TIMEOUT_MS,
+  },
 ): Promise<RelayResponse> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(websocketUrl(session.relayUrl));
     const requestId = Crypto.randomUUID();
     let sessionKey: string | undefined;
     let finished = false;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    const armTimeout = (milliseconds: number, message: string) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(
+        () => finish(() => reject(new Error(message))),
+        milliseconds,
+      );
+    };
 
     const finish = (callback: () => void) => {
       if (finished) return;
@@ -45,10 +60,7 @@ export function relayRequest(
       callback();
     };
 
-    const timeout = setTimeout(
-      () => finish(() => reject(new Error('Relay request timed out.'))),
-      30_000,
-    );
+    armTimeout(timeouts.handshake, 'Relay handshake timed out.');
 
     socket.onerror = () => finish(() => reject(new Error('Could not reach Poly relay.')));
     socket.onclose = () => {
@@ -79,6 +91,7 @@ export function relayRequest(
           return;
         }
         sessionKey = createSessionKey(message.peerPublicKey, session.deviceSecretKey);
+        armTimeout(timeouts.idle, 'Relay stream became idle.');
         socket.send(JSON.stringify({
           type: 'frame',
           payload: encryptSessionMessage(JSON.stringify({
@@ -92,6 +105,7 @@ export function relayRequest(
         return;
       }
       if (message.type !== 'frame' || !message.payload || !sessionKey) return;
+      armTimeout(timeouts.idle, 'Relay stream became idle.');
       const response = JSON.parse(decryptSessionMessage(message.payload, sessionKey)) as {
         type: string;
         id: string;
@@ -101,9 +115,13 @@ export function relayRequest(
       };
       if (response.id !== requestId) return;
       if (response.type === 'stream') {
-        onStream?.(response.data ?? '');
+        try {
+          onStream?.(response.data ?? '');
+        } catch (error) {
+          finish(() => reject(error));
+        }
       } else if (response.type === 'stream-end') {
-        finish(() => resolve({ status: 200, body: '' }));
+        finish(() => resolve({ status: response.status ?? 200, body: '' }));
       } else if (response.type === 'response') {
         finish(() => resolve({ status: response.status ?? 500, body: response.body ?? '' }));
       }
