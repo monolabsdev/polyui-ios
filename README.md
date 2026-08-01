@@ -3,14 +3,14 @@
     <!-- LEFT SIDE: TEXT CONTENT -->
     <td width="45%" valign="top">
 
-<h1>Poly UI iOS</h1>
+# Poly UI iOS
 
-<p>A native iOS remote client for the <a href="https://github.com/monolabsdev/poly-ui">Poly UI</a> desktop AI application.</p>
+A native iOS remote client for the [Poly UI](https://github.com) desktop AI application.
 
-<p>
-  <img src="https://img.shields.io/badge/Expo_SDK-57-000000?logo=expo&logoColor=white" alt="Expo SDK 57" />
-  <img src="https://img.shields.io/badge/SwiftUI-native-0D1117?logo=swift&logoColor=white" alt="SwiftUI" />
-  <img src="https://img.shields.io/badge/E2E_Encrypted-X25519_%2B_XChaCha20--Poly1305-6a4cff" alt="End-to-end encrypted" />
+<p align="left">
+  <img src="https://shields.io" alt="Expo SDK 57" />
+  <img src="https://shields.io" alt="SwiftUI" />
+  <img src="https://shields.io" alt="End-to-end encrypted" />
 </p>
 
 ### Features
@@ -41,12 +41,16 @@ Open the app in a development build, iOS simulator, or Expo Go.
 
 ### Live demo
 
+<br/>
+
 <img src="public/poly-ui-demo.gif" alt="Poly UI iOS demo" width="300" />
 
     </td>
   </tr>
 </table>
 
+<br/>
+
 <div align="center">
-  <sub>MIT © <a href="https://github.com/monolabsdev">monolabsdev</a></sub>
+  <sub>MIT © <a href="https://github.com">monolabsdev</a></sub>
 </div>
