@@ -1,6 +1,6 @@
 # Poly UI iOS
 
-A native-feeling iOS client for the [Poly](https://github.com/theoslater/poly) desktop AI agent, built with Expo SDK 57 and SwiftUI via `@expo/ui`.
+An iOS remote client for the [Poly UI](https://github.com/monolabsdev/poly-ui) desktop AI application.
 
 ## Demo
 
