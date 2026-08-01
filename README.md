@@ -1,12 +1,21 @@
+<div align="center">
+
 # Poly UI iOS
 
-An iOS remote client for the [Poly UI](https://github.com/monolabsdev/poly-ui) desktop AI application.
+A native iOS remote client for [Poly UI](https://github.com/monolabsdev/poly-ui), the desktop AI application.
 
-## Demo
+<img src="https://img.shields.io/badge/Expo_SDK-57-000000?logo=expo&logoColor=white" alt="Expo SDK 57" />
+<img src="https://img.shields.io/badge/SwiftUI-native-0D1117?logo=swift&logoColor=white" alt="SwiftUI" />
+<img src="https://img.shields.io/badge/E2E_Encrypted-X25519_%2B_XChaCha20--Poly1305-6a4cff" alt="E2E Encrypted" />
+<img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License" />
 
-<img src="public/poly-ui-demo.gif" alt="Poly UI iOS demo" width="360" />
+</div>
 
-## Features
+<table>
+  <tr>
+    <td width="55%" valign="top">
+
+### Features
 
 - Native SwiftUI chrome: workspace, chat, activity, and settings
 - Real-time agent chat with streaming messages and Markdown rendering
@@ -15,19 +24,32 @@ An iOS remote client for the [Poly UI](https://github.com/monolabsdev/poly-ui) d
 - Background agent completion notifications via native APNs
 - Offline conversation history in SQLite
 
-## Getting started
+### Tech stack
 
-```bash
+Expo SDK 57 · Expo Router · `@expo/ui/swift-ui` · TypeScript · React Query · Zustand · Zod · Expo Secure Store · `@noble/*` cryptography
+
+### Getting started
+
+```
 bun install
 npx expo start
 ```
 
 Then open the app in a development build, iOS simulator, or Expo Go.
 
-## Tech stack
+    </td>
+    <td width="45%" valign="top" align="center">
 
-Expo SDK 57, Expo Router, `@expo/ui/swift-ui`, TypeScript, React Query, Zustand, Zod, Expo Secure Store, `@noble/*` cryptography.
+#### Live demo
 
-## License
+<img src="public/poly-ui-demo.gif" alt="Poly UI iOS demo" width="280" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);" />
 
-MIT
+    </td>
+  </tr>
+</table>
+
+<div align="center">
+
+MIT © [monolabsdev](https://github.com/monolabsdev)
+
+</div>
