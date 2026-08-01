@@ -1,11 +1,16 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 
 import { initializeConversationCache } from '@/data/conversation-cache';
-import { configureNotifications } from '@/services/notifications';
+import { getNotificationsEnabled } from '@/data/settings-storage';
+import {
+  configureNotifications,
+  listenForPushTokenChanges,
+  syncNotificationRegistration,
+} from '@/services/notifications';
 
 SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
@@ -15,6 +20,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     void Promise.all([SplashScreen.hideAsync(), initializeConversationCache(), configureNotifications()]);
+    void syncNotificationRegistration(getNotificationsEnabled()).catch(() => undefined);
+    const pushTokens = listenForPushTokenChanges();
+    const appState = AppState.addEventListener('change', (state) => {
+      focusManager.setFocused(state === 'active');
+      if (state === 'active') {
+        void syncNotificationRegistration(getNotificationsEnabled()).catch(() => undefined);
+      }
+    });
+    return () => {
+      pushTokens.remove();
+      appState.remove();
+    };
   }, []);
 
   return (

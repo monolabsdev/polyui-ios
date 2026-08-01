@@ -25,6 +25,10 @@ export const relayPairingPayloadSchema = z.object({
   hostName: z.string().min(1),
   pairingToken: z.string().min(1),
   hostPublicKey: z.string().length(64),
+  defaultModel: z.object({
+    connectionId: z.string().min(1),
+    name: z.string().min(1),
+  }).optional(),
 });
 
 export type Agent = z.infer<typeof agentSchema>;

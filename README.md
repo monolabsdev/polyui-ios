@@ -23,6 +23,26 @@ In the output, you'll find options to open the app in a
 - [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
 - [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
+## Agent completion notifications (no EAS)
+
+Poly uses the iPhone's native APNs token. Enable Push Notifications for the
+`com.theoslater.polyuiios` App ID and sign the app with a matching provisioning
+profile. The unsigned development IPA cannot register with APNs by itself.
+
+Create an Apple APNs `.p8` provider key, keep it outside the repository, and set
+these variables for the Poly desktop process:
+
+```text
+POLY_APNS_TEAM_ID=your-apple-team-id
+POLY_APNS_KEY_ID=your-provider-key-id
+POLY_APNS_PRIVATE_KEY_PATH=/absolute/path/to/AuthKey_XXXXXXXXXX.p8
+POLY_APNS_TOPIC=com.theoslater.polyuiios
+```
+
+The iOS app selects APNs sandbox or production from its signing entitlement,
+registers the token with the paired desktop, and refreshes messages when it
+returns to the foreground.
+
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
 ## Get a fresh project
