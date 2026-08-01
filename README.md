@@ -1,76 +1,33 @@
-# Welcome to your Expo app 👋
+# Poly UI iOS
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A native-feeling iOS client for the [Poly](https://github.com/theoslater/poly) desktop AI agent, built with Expo SDK 57 and SwiftUI via `@expo/ui`.
 
-## Get started
+## Demo
 
-1. Install dependencies
+<img src="public/poly-ui-demo.gif" alt="Poly UI iOS demo" width="360" />
 
-   ```bash
-   npm install
-   ```
+## Features
 
-2. Start the app
+- Native SwiftUI chrome: workspace, chat, activity, and settings
+- Real-time agent chat with streaming messages and Markdown rendering
+- QR code pairing with the Poly desktop app
+- End-to-end encrypted sessions (X25519 + XChaCha20-Poly1305)
+- Background agent completion notifications via native APNs
+- Offline conversation history in SQLite
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-## Agent completion notifications (no EAS)
-
-Poly uses the iPhone's native APNs token. Enable Push Notifications for the
-`com.theoslater.polyuiios` App ID and sign the app with a matching provisioning
-profile. The unsigned development IPA cannot register with APNs by itself.
-
-Create an Apple APNs `.p8` provider key, keep it outside the repository, and set
-these variables for the Poly desktop process:
-
-```text
-POLY_APNS_TEAM_ID=your-apple-team-id
-POLY_APNS_KEY_ID=your-provider-key-id
-POLY_APNS_PRIVATE_KEY_PATH=/absolute/path/to/AuthKey_XXXXXXXXXX.p8
-POLY_APNS_TOPIC=com.theoslater.polyuiios
-```
-
-The iOS app selects APNs sandbox or production from its signing entitlement,
-registers the token with the paired desktop, and refreshes messages when it
-returns to the foreground.
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Getting started
 
 ```bash
-npm run reset-project
+bun install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Then open the app in a development build, iOS simulator, or Expo Go.
 
-### Other setup steps
+## Tech stack
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Expo SDK 57, Expo Router, `@expo/ui/swift-ui`, TypeScript, React Query, Zustand, Zod, Expo Secure Store, `@noble/*` cryptography.
 
-## Learn more
+## License
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+MIT
