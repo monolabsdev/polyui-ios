@@ -1,6 +1,7 @@
-<table>
+<table width="100%">
   <tr>
-    <td width="58%" valign="top">
+    <!-- LEFT SIDE: TEXT CONTENT -->
+    <td width="45%" valign="top">
 
 <h1>Poly UI iOS</h1>
 
@@ -35,7 +36,8 @@ npx expo start
 Open the app in a development build, iOS simulator, or Expo Go.
 
     </td>
-    <td width="42%" valign="top" align="center">
+    <!-- RIGHT SIDE: DEMO VIDEO -->
+    <td width="55%" valign="top" align="center">
 
 ### Live demo
 
