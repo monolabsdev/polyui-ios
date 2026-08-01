@@ -1,19 +1,16 @@
-<div align="center">
-
-# Poly UI iOS
-
-A native iOS remote client for [Poly UI](https://github.com/monolabsdev/poly-ui), the desktop AI application.
-
-<img src="https://img.shields.io/badge/Expo_SDK-57-000000?logo=expo&logoColor=white" alt="Expo SDK 57" />
-<img src="https://img.shields.io/badge/SwiftUI-native-0D1117?logo=swift&logoColor=white" alt="SwiftUI" />
-<img src="https://img.shields.io/badge/E2E_Encrypted-X25519_%2B_XChaCha20--Poly1305-6a4cff" alt="E2E Encrypted" />
-<img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License" />
-
-</div>
-
 <table>
   <tr>
-    <td width="55%" valign="top">
+    <td width="58%" valign="top">
+
+<h1>Poly UI iOS</h1>
+
+<p>A native iOS remote client for the <a href="https://github.com/monolabsdev/poly-ui">Poly UI</a> desktop AI application.</p>
+
+<p>
+  <img src="https://img.shields.io/badge/Expo_SDK-57-000000?logo=expo&logoColor=white" alt="Expo SDK 57" />
+  <img src="https://img.shields.io/badge/SwiftUI-native-0D1117?logo=swift&logoColor=white" alt="SwiftUI" />
+  <img src="https://img.shields.io/badge/E2E_Encrypted-X25519_%2B_XChaCha20--Poly1305-6a4cff" alt="End-to-end encrypted" />
+</p>
 
 ### Features
 
@@ -30,26 +27,24 @@ Expo SDK 57 · Expo Router · `@expo/ui/swift-ui` · TypeScript · React Query �
 
 ### Getting started
 
-```
+```bash
 bun install
 npx expo start
 ```
 
-Then open the app in a development build, iOS simulator, or Expo Go.
+Open the app in a development build, iOS simulator, or Expo Go.
 
     </td>
-    <td width="45%" valign="top" align="center">
+    <td width="42%" valign="top" align="center">
 
-#### Live demo
+### Live demo
 
-<img src="public/poly-ui-demo.gif" alt="Poly UI iOS demo" width="280" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);" />
+<img src="public/poly-ui-demo.gif" alt="Poly UI iOS demo" width="300" />
 
     </td>
   </tr>
 </table>
 
 <div align="center">
-
-MIT © [monolabsdev](https://github.com/monolabsdev)
-
+  <sub>MIT © <a href="https://github.com/monolabsdev">monolabsdev</a></sub>
 </div>
